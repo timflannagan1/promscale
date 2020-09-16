@@ -16,7 +16,7 @@ PromQL, this platform empowers the user to ask complex analytical
 queries from their metrics data, and thus extract more meaningful
 insights.
 
-✅  We are the only long-term store for Prometheus data to have recieved a 
+✅  We are the only long-term store for Prometheus data to have received a 
 [100% compliance test score](https://promlabs.com/promql-compliance-test-results-timescaledb) 
 (with no cross-cutting concerns) from PromLab's 
 [PromQL Compliance Test Suite](https://promlabs.com/promql-compliance-tests/). 
