@@ -1,0 +1,31 @@
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: exporter-drop-chunk
+  labels:
+    app: exporter
+spec:
+  schedule: "*/30 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: exporter-drop-chunk
+              image: postgres:12-alpine
+              args:
+                - psql
+                - -c
+                - CALL prom_api.execute_maintenance();
+              env:
+                - name: PGPORT
+                  value: "5432"
+                - name: PGUSER
+                  value: testuser
+                - name: PGPASSWORD
+                  value: testpass
+                - name: PGHOST
+                  value: timescaledb.tflannag.svc.cluster.local
+                - name: PGDATABASE
+                  value: metering
+          restartPolicy: OnFailure

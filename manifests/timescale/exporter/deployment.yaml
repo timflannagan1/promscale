@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: exporter
+  labels:
+    app: exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: exporter
+  template:
+    metadata:
+      labels:
+        app: exporter
+    spec:
+      containers:
+        - name: exporter
+          image: timescale/timescale-prometheus
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: 100m
+              memory: 100Mi
+          ports:
+            - containerPort: 9201
+              name: connector-port
+          env:
+            - name: TS_PROM_DB_PORT
+              value: "5432"
+            - name: TS_PROM_DB_USER
+              value: testuser
+            - name: TS_PROM_DB_PASSWORD
+              value: testpass
+            - name: TS_PROM_DB_HOST
+              value: timescaledb.tflannag.svc.cluster.local
+            - name: TS_PROM_DB_NAME
+              value: metering
+            - name: TS_PROM_DB_SSL_MODE
+              value: disable
+            - name: TS_PROM_LABELS_CACHE_SIZE
+              value: "1000"
+            - name: TS_PROM_DB_WRITER_CONNECTION_CONCURRENCY
+              value: "1"
