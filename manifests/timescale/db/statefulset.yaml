@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: timescaledb
+spec:
+  replicas: 1
+  serviceName: timescaledb
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: timescaledb
+  template:
+    metadata:
+      name: timescaledb
+      labels:
+        app: timescaledb
+    spec:
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: timescaledb
+          image: timescale/timescaledb:latest-pg12
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 9201
+              name: connector-port
+          env:
+            - name: POSTGRES_DB
+              value: metering
+            - name: POSTGRES_PASSWORD
+              value: testpass
+            - name: POSTGRES_USER
+              value: testuser
+            - name: POSTGRES_HOST_AUTH_METHOD
+              value: trust
+          resources:
+            limits:
+              cpu: "1"
+              memory: 500Mi
+            requests:
+              cpu: 100m
+              memory: 100Mi
+          volumeMounts:
+            - name: postgres-lib-data
+              mountPath: /var/lib/postgresql
+      volumes:
+        - name: postgres-lib-data
+          persistentVolumeClaim:
+            claimName: timescaledb-postgres-data
