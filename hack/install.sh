@@ -10,7 +10,11 @@ export NAMESPACE=${1:-tflannag}
 export MANIFEST_DIR=${MANIFEST_DIR:=${ROOT_DIR}/manifests}
 
 if ! oc get ns ${NAMESPACE} >/dev/null 2>&1; then
+    echo "Creating the ${NAMESPACE} namespace"
     oc create ns ${NAMESPACE}
+    
+    echo "Adding the 'anyuid' SCC to the default ServiceAccount"
+    oc -n ${NAMESPACE} adm policy add-scc-to-user anyuid -z default
 fi
 
 #
