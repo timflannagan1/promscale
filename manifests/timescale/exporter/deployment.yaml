@@ -33,7 +33,7 @@ spec:
             - name: TS_PROM_DB_PASSWORD
               value: testpass
             - name: TS_PROM_DB_HOST
-              value: timescaledb.tflannag.svc.cluster.local
+              value: timescaledb.$NAMESPACE.svc
             - name: TS_PROM_DB_NAME
               value: metering
             - name: TS_PROM_DB_SSL_MODE
