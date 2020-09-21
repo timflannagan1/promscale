@@ -7,6 +7,7 @@ set -eou pipefail
 ROOT_DIR=$(dirname "${BASH_SOURCE[0]}")/..
 
 export NAMESPACE=${1:-tflannag}
+export MONITORING_NAMESPACE=${MONITORING_NAMESPACE:=openshift-monitoring}
 export MANIFEST_DIR=${MANIFEST_DIR:=${ROOT_DIR}/manifests}
 
 if ! oc get ns ${NAMESPACE} >/dev/null 2>&1; then
@@ -52,12 +53,12 @@ fi
 #
 # Create the monitoring resources
 #
-if ! oc -n openshift-monitoring get configmap cluster-monitoring-operator >/dev/null 2>&1; then
+if ! oc -n ${MONITORING_NAMESPACE} get configmap cluster-monitoring-operator >/dev/null 2>&1; then
     echo "Creating the cluster-monitoring-operator ConfigMap"
-    envsubst < ${MANIFEST_DIR}/monitoring/configmap.yaml | oc -n openshift-monitoring apply -f -
+    envsubst < ${MANIFEST_DIR}/monitoring/configmap.yaml | oc -n ${MONITORING_NAMESPACE} apply -f -
 fi
 
-if ! oc -n ${NAMESPACE} cluster-monitoring-operator >/dev/null 2>&1; then
+if ! oc -n ${MONITORING_NAMESPACE} get prometheusrules metering >/dev/null 2>&1; then
     echo "Creating the metering PrometheusRule custom resource"
-    oc -n ${NAMESPACE} apply -f ${MANIFEST_DIR}/monitoring/rules.yaml
+    oc -n ${MONITORING_NAMESPACE} apply -f ${MANIFEST_DIR}/monitoring/rules.yaml
 fi
