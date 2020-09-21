@@ -59,5 +59,5 @@ fi
 
 if ! oc -n ${NAMESPACE} cluster-monitoring-operator >/dev/null 2>&1; then
     echo "Creating the metering PrometheusRule custom resource"
-    envsubst < ${MANIFEST_DIR}/monitoring/rules.yaml | oc -n ${NAMESPACE} apply -f -
+    oc -n ${NAMESPACE} apply -f ${MANIFEST_DIR}/monitoring/rules.yaml
 fi
