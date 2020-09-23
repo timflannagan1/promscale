@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: presto
+  labels:
+    app: presto
+    presto: coordinator
+    component: presto-coordinator
+spec:
+  ports:
+  - name: api
+    port: 8080
+  - name: metrics
+    port: 8082
+  selector:
+    app: presto
+    presto: coordinator

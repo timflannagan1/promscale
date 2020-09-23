@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: catalog
+data:
+  hive.properties: |
+    connector.name=hive-hadoop2
+    hive.metastore=file
+    hive.metastore.catalog.dir=/var/hive/metastore
+
+  prometheus.properties: |
+    connector.name=prometheus
+    prometheus.uri=https://thanos-querier.openshift-monitoring.svc:9091/
+    prometheus.query.chunk.size.duration=1d
+    prometheus.max.query.range.duration=21d
+    prometheus.cache.ttl=30s
+    prometheus.bearer.token.file=/var/run/secrets/kubernetes.io/serviceaccount/token

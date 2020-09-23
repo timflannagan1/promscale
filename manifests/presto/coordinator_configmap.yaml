@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config
+data:
+  log.properties: |
+    com.facebook.presto=INFO
+
+  node.properties: |
+    node.data-dir=/var/presto/data
+    node.environment=production
+  
+  config.properties: |
+    coordinator=true
+    node-scheduler.include-coordinator=true
+
+    discovery-server.enabled=true
+    http-server.http.port=8080
+    discovery.uri=http://presto:8080
+    
+    query.max-memory=5GB
+    query.max-memory-per-node=1GB
+    query.max-total-memory-per-node=2GB
+
+  jvm.config: |
+    -server
+    -XX:+UseContainerSupport
+    -XX:+UseG1GC
+    -XX:+UseGCOverheadLimit
+    -XX:InitialRAMPercentage=50.0
+    -XX:MaxRAMPercentage=50.0
+    -XX:+ExplicitGCInvokesConcurrent
+    -XX:+HeapDumpOnOutOfMemoryError
+    -XX:HeapDumpPath=/var/presto/logs/heap_dump.bin
+    -XX:+ExitOnOutOfMemoryError
+    -XX:ErrorFile=/var/presto/logs/java_error%p.log
+    -verbose:gc
+    -Xloggc:/var/presto/logs/gc.log
+    -XX:+PrintGCDetails
+    -javaagent:/opt/jmx_exporter/jmx_exporter.jar=8082:/opt/jmx_exporter/config/config.yml
+    -Dcom.sun.management.jmxremote
+    -Dcom.sun.management.jmxremote.local.only=false
+    -Dcom.sun.management.jmxremote.ssl=false
+    -Dcom.sun.management.jmxremote.authenticate=false
+    -Dcom.sun.management.jmxremote.port=8081
+    -Dcom.sun.management.jmxremote.rmi.port=8081
+    -Djava.rmi.server.hostname=127.0.0.1
