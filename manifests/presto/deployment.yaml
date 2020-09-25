@@ -19,30 +19,6 @@ spec:
       securityContext:
         runAsNonRoot: true
       serviceAccount: presto
-      volumes:
-      - name: config-properties
-        configMap:
-          name: config
-      - name: catalog-properties
-        configMap:
-          name: catalog  
-      - name: jmx-properties
-        configMap:
-          name: jmx
-      - name: trusted-ca-bundle
-        configMap:
-          name: coordinator-trusted-ca-bundle
-          items:
-          - key: ca-bundle.crt
-            path: service-ca.crt
-      - name: presto-data
-        emptyDir: {}
-      - name: presto-logs
-        emptyDir: {}
-      - name: metastore
-        emptyDir: {}
-      - name: presto-etc
-        emptyDir: {}
       initContainers:
       - name: setup-coordinator-properties
         image: quay.io/tflannag/presto:334
@@ -55,7 +31,7 @@ spec:
           
           set -eou pipefail
 
-          echo "Copying ConfigMap volume contents"
+          echo "Copying ConfigMap volume contents into an empty directory"
           cp -v -L -r -f /presto-etc/* /opt/presto/presto-server/etc/
 
           # add node id to node config
@@ -107,14 +83,17 @@ spec:
             done
           }
 
-          # # always add the openshift service-ca.crt if it exists
-          # if [ -a /etc/pki/ca-trust/extracted/pem/service-ca.crt ]; then
-          #   echo "Adding /etc/pki/ca-trust/extracted/pem/service-ca.crt to $JAVA_HOME/lib/security/cacerts"
-          #   importCert /etc/pki/ca-trust/extracted/pem/service-ca.crt changeit $JAVA_HOME/lib/security/cacerts
-          # fi
-
-          echo "Adding /var/run/secrets/kubernetes.io/serviceaccount/ca.crt to $JAVA_HOME/lib/security/cacerts"
-          importCert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt changeit $JAVA_HOME/lib/security/cacerts
+          # Add the mounted ConfigMap containing the Service serving CA bundle
+          # if that bundle exists. Note: in 4.5+ there's no controller responsible
+          # for injecting this CA bundle for us, so we need to manually do the creation
+          # of the ConfigMap and mounting of that ConfigMap ourselves.
+          #
+          # TODO: We should probably require this to be added in either case if we don't
+          # care about backwards compatibility.
+          if [ -a /var/run/configmaps/service-ca-bundle/service-ca.crt ]; then
+            echo "Adding /var/run/configmaps/service-ca-bundle/service-ca.crt to $JAVA_HOME/lib/security/cacerts"
+            importCert /var/run/configmaps/service-ca-bundle/service-ca.crt changeit $JAVA_HOME/lib/security/cacerts
+          fi
 
           /opt/presto/presto-server/bin/launcher run
         ports:
@@ -122,9 +101,14 @@ spec:
           containerPort: 8080
         - name: metrics
           containerPort: 8082
+        resources:
+          requests:
+            cpu: 1
+            memory: 1Gi
         volumeMounts:
-        - name: trusted-ca-bundle
-          mountPath: /etc/pki/ca-trust/extracted/pem
+        - name: presto-service-ca-bundle
+          mountPath: /var/run/configmaps/service-ca-bundle
+          readOnly: true
         - name: presto-etc
           mountPath: /opt/presto/presto-server/etc
         - name: catalog-properties
@@ -137,7 +121,25 @@ spec:
           mountPath: /opt/jmx_exporter/config
         - name: metastore
           mountPath: /var/hive/metastore
-        resources:
-          requests:
-            cpu: 1
-            memory: 1Gi
+      volumes:
+      - name: config-properties
+        configMap:
+          name: config
+      - name: catalog-properties
+        configMap:
+          name: catalog  
+      - name: jmx-properties
+        configMap:
+          name: jmx
+      - name: presto-service-ca-bundle
+        configMap:
+          name: coordinator-trusted-ca-bundle
+          optional: true
+      - name: presto-data
+        emptyDir: {}
+      - name: presto-logs
+        emptyDir: {}
+      - name: metastore
+        emptyDir: {}
+      - name: presto-etc
+        emptyDir: {}
