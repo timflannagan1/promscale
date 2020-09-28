@@ -18,19 +18,42 @@ spec:
         fsGroup: 70
         runAsUser: 70
       containers:
-        - env:
-            - name: POSTGRES_DB
-              value: metering
-            - name: POSTGRES_PASSWORD
-              value: testpass
-            - name: POSTGRES_USER
-              value: testuser
-            - name: POSTGRES_HOST_AUTH_METHOD
-              value: trust
-          image: timescale/timescaledb:latest-pg12
-          imagePullPolicy: IfNotPresent
-          name: postgresql
-          ports:
-            - containerPort: 5432
-              protocol: TCP
-          resources: {}
+      - name: postgresql
+        image: timescale/timescaledb:latest-pg12
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: POSTGRES_DB
+          value: metering
+        - name: POSTGRES_PASSWORD
+          value: testpass
+        - name: POSTGRES_USER
+          value: testuser
+        - name: POSTGRES_HOST_AUTH_METHOD
+          value: trust
+        readinessProbe:
+          failureThreshold: 5
+          initialDelaySeconds: 10
+          timeoutSeconds: 60
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - exec /usr/local/bin/pg_isready -U $POSTGRES_USER -h $HOSTNAME -p 5432
+        livenessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - exec /usr/local/bin/pg_isready -U $POSTGRES_USER -h $HOSTNAME -p 5432
+          failureThreshold: 5
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 60
+        ports:
+        - name: postgres
+          containerPort: 5432
+          protocol: TCP
+        resources:
+          requests:
+            cpu: 250m
+            memory: 250Mi
