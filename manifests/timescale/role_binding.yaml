@@ -1,0 +1,14 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tflannag-postgres-service-account
+  labels:
+    app: postgres
+subjects:
+- kind: ServiceAccount
+  name: postgres
+  namespace: tflannag
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: tflannag-postgres-service-account

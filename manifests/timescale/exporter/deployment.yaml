@@ -14,31 +14,64 @@ spec:
       labels:
         app: exporter
     spec:
+      serviceAccountName: postgres
+      initContainers:
+      - name: wait-for-timescaledb-deployment-readiness
+        image: quay.io/openshift/origin-cli:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -c
+        - |
+          # Note: not a huge fan of this approach to ensure that the timescaledb
+          # instance is reporting _at least_ an available status, as it looks like
+          # the current exporter code can't handle the backoff situation where the
+          # database parameters provided to that Go binary can't serve traffic yet.
+          #
+          # A couple of other things to note:
+          # - Deployments don't have the ability to report a `condition=ready`, which
+          #   makes sense in theory as there can be multiple replicas, so that leaves us
+          #   with a somewhat poor check for at least minimum availability.
+          # - When using an exec-command liveness probe check, I wasn't able to find a
+          #   way to curl that probe's endpoint in another Pod without using something
+          #   more robust (like httpGet) without standing up a server, and postgres doesn't
+          #   supply a server that exposes a status endpoint as they handle this process
+          #   using the `pg_isready` binary that's present in the postgres container.
+          echo "Waiting for the TimescaleDB to report a ready status"
+          oc -n ${NAMESPACE} wait --for=condition=available deployment/timescaledb --timeout=30s
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
       containers:
-        - name: exporter
-          image: timescale/timescale-prometheus
-          imagePullPolicy: IfNotPresent
-          resources:
-            requests:
-              cpu: 100m
-              memory: 100Mi
-          ports:
-            - containerPort: 9201
-              name: connector-port
-          env:
-            - name: TS_PROM_DB_PORT
-              value: "5432"
-            - name: TS_PROM_DB_USER
-              value: testuser
-            - name: TS_PROM_DB_PASSWORD
-              value: testpass
-            - name: TS_PROM_DB_HOST
-              value: timescaledb.$NAMESPACE.svc
-            - name: TS_PROM_DB_NAME
-              value: metering
-            - name: TS_PROM_DB_SSL_MODE
-              value: disable
-            - name: TS_PROM_LABELS_CACHE_SIZE
-              value: "1000"
-            - name: TS_PROM_DB_WRITER_CONNECTION_CONCURRENCY
-              value: "1"
+      - name: exporter
+        image: quay.io/tflannag/promscale:latest
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+          limits:
+            cpu: 250m
+            memory: 250Mi
+        ports:
+        - name: connector
+          containerPort: 9201
+        env:
+        - name: TS_PROM_DB_PORT
+          value: "5432"
+        - name: TS_PROM_DB_USER
+          value: testuser
+        - name: TS_PROM_DB_PASSWORD
+          value: testpass
+        - name: TS_PROM_DB_HOST
+          value: timescaledb.tflannag.svc
+        - name: TS_PROM_DB_NAME
+          value: metering
+        - name: TS_PROM_DB_SSL_MODE
+          value: disable
+        - name: TS_PROM_LABELS_CACHE_SIZE
+          value: "1000"
+        - name: TS_PROM_DB_WRITER_CONNECTION_CONCURRENCY
+          value: "1"
