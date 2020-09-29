@@ -48,6 +48,9 @@ spec:
       - name: exporter
         image: quay.io/tflannag/promscale:latest
         imagePullPolicy: IfNotPresent
+        args:
+        - --leader-election-pg-advisory-lock-id=1
+        - --leader-election-pg-advisory-lock-prometheus-timeout=30s
         resources:
           requests:
             cpu: 100m
