@@ -35,7 +35,7 @@ jobs:
 
     - name: Format
       run: |
-        diff -u <(echo -n) <(gofmt -d .)
+        diff -u <(echo -n) <(find . -name '*.go' -not -path "./vendor/*" | xargs gofmt -d)
 
     - name: Lint
       run: |
