@@ -16,7 +16,7 @@ if ! oc get ns ${NAMESPACE} >/dev/null 2>&1; then
 fi
 
 echo "Adding the 'anyuid' SCC to the default ServiceAccount"
-oc -n ${NAMESPACE} adm policy add-scc-to-user anyuid -z default
+oc -n ${NAMESPACE} adm policy add-scc-to-user anyuid -z postgres
 
 #
 # Create the TimescaleDB resources

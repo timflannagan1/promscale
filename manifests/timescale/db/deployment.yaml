@@ -15,9 +15,6 @@ spec:
         app: timescaledb
     spec:
       serviceAccountName: postgres
-      securityContext:
-        fsGroup: 70
-        runAsUser: 70
       containers:
       - name: postgresql
         image: timescale/timescaledb:latest-pg12
