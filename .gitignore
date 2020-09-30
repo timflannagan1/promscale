@@ -1,5 +1,5 @@
 *~
-/timescale-prometheus*
+/promscale*
 /version.properties
 /.target_os
 /.history
@@ -7,3 +7,4 @@
 /.idea
 .DS_Store
 .git
+scratch/

@@ -11,9 +11,9 @@ import (
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
-	"github.com/timescale/timescale-prometheus/pkg/log"
-	"github.com/timescale/timescale-prometheus/pkg/promql"
-	"github.com/timescale/timescale-prometheus/pkg/query"
+	"github.com/timescale/promscale/pkg/log"
+	"github.com/timescale/promscale/pkg/promql"
+	"github.com/timescale/promscale/pkg/query"
 )
 
 func Series(conf *Config, queryable *query.Queryable) http.Handler {
@@ -71,10 +71,10 @@ func series(queryable *query.Queryable) http.HandlerFunc {
 		var sets []storage.SeriesSet
 		var warnings storage.Warnings
 		for _, mset := range matcherSets {
-			s, _, wrn, err := q.Select(false, nil, nil, mset...)
-			warnings = append(warnings, wrn...)
-			if err != nil {
-				respondError(w, http.StatusUnprocessableEntity, err, "execution")
+			s, _ := q.Select(false, nil, nil, mset...)
+			warnings = append(warnings, s.Warnings()...)
+			if s.Err() != nil {
+				respondError(w, http.StatusUnprocessableEntity, s.Err(), "execution")
 				return
 			}
 			sets = append(sets, s)
@@ -85,7 +85,7 @@ func series(queryable *query.Queryable) http.HandlerFunc {
 			metrics = append(metrics, set.At().Labels())
 		}
 		if set.Err() != nil {
-			respondError(w, http.StatusUnprocessableEntity, err, "execution")
+			respondError(w, http.StatusUnprocessableEntity, set.Err(), "execution")
 		}
 
 		respondSeries(w, &promql.Result{

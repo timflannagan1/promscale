@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/timescale/timescale-prometheus/pkg/log"
+	"github.com/timescale/promscale/pkg/log"
 )
 
 const (
@@ -17,7 +17,9 @@ const (
 )
 
 func init() {
-	err := log.Init("debug")
+	err := log.Init(log.Config{
+		Level: "debug",
+	})
 	if err != nil {
 		panic(err)
 	}

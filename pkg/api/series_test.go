@@ -5,16 +5,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/timescale/timescale-prometheus/pkg/log"
-	"github.com/timescale/timescale-prometheus/pkg/query"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/timescale/promscale/pkg/log"
+	"github.com/timescale/promscale/pkg/query"
 )
 
 func TestSeries(t *testing.T) {
-	_ = log.Init("debug")
+	_ = log.Init(log.Config{
+		Level: "debug",
+	})
 
 	testCases := []struct {
 		name        string

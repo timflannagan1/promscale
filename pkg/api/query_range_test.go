@@ -12,13 +12,15 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/timescale/timescale-prometheus/pkg/log"
-	"github.com/timescale/timescale-prometheus/pkg/promql"
-	"github.com/timescale/timescale-prometheus/pkg/query"
+	"github.com/timescale/promscale/pkg/log"
+	"github.com/timescale/promscale/pkg/promql"
+	"github.com/timescale/promscale/pkg/query"
 )
 
 func TestRangedQuery(t *testing.T) {
-	_ = log.Init("debug")
+	_ = log.Init(log.Config{
+		Level: "debug",
+	})
 	testCases := []struct {
 		name        string
 		timeout     string

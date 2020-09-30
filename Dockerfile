@@ -16,5 +16,5 @@ RUN CGO_ENABLED=0 \
 
 FROM centos:8
 USER 3001
-COPY --from=builder /go/timescale-prometheus /
-ENTRYPOINT ["/timescale-prometheus"]
+COPY --from=builder /go/promscale /
+ENTRYPOINT ["/promscale"]

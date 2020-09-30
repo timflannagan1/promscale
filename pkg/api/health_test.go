@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/timescale/timescale-prometheus/pkg/log"
+	"github.com/timescale/promscale/pkg/log"
 )
 
 var (
@@ -27,7 +27,9 @@ func (m *mockHealthChecker) HealthCheck() error {
 }
 
 func TestHealth(t *testing.T) {
-	_ = log.Init("debug")
+	_ = log.Init(log.Config{
+		Level: "debug",
+	})
 
 	testCases := []struct {
 		name                   string

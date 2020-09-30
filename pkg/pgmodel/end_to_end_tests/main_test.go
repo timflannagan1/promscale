@@ -14,21 +14,21 @@ import (
 
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/timescale/timescale-prometheus/pkg/internal/testhelpers"
-	"github.com/timescale/timescale-prometheus/pkg/log"
-	"github.com/timescale/timescale-prometheus/pkg/pgmodel"
-	"github.com/timescale/timescale-prometheus/pkg/version"
+	"github.com/timescale/promscale/pkg/internal/testhelpers"
+	"github.com/timescale/promscale/pkg/log"
+	"github.com/timescale/promscale/pkg/pgmodel"
+	"github.com/timescale/promscale/pkg/version"
 
 	_ "github.com/jackc/pgx/v4/stdlib"
 
-	. "github.com/timescale/timescale-prometheus/pkg/pgmodel"
+	. "github.com/timescale/promscale/pkg/pgmodel"
 )
 
 var (
 	testDatabase      = flag.String("database", "tmp_db_timescale_migrate_test", "database to run integration tests on")
 	updateGoldenFiles = flag.Bool("update", false, "update the golden files of this test")
 	useDocker         = flag.Bool("use-docker", true, "start database using a docker container")
-	useExtension      = flag.Bool("use-extension", true, "use the timescale_prometheus_extra extension")
+	useExtension      = flag.Bool("use-extension", true, "use the promscale extension")
 	printLogs         = flag.Bool("print-logs", false, "print TimescaleDB logs")
 	extendedTest      = flag.Bool("extended-test", false, "run extended testing dataset and PromQL queries")
 
@@ -41,7 +41,9 @@ func TestMain(m *testing.M) {
 	func() {
 		flag.Parse()
 		ctx := context.Background()
-		_ = log.Init("debug")
+		_ = log.Init(log.Config{
+			Level: "debug",
+		})
 		if !testing.Short() {
 			var err error
 
@@ -110,7 +112,12 @@ func performMigrate(t testing.TB, connectURL string) {
 		t.Fatal(err)
 	}
 	defer migratePool.Close()
-	err = Migrate(migratePool, pgmodel.VersionInfo{Version: version.Version, CommitHash: "azxtestcommit"})
+	conn, err := migratePool.Acquire(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Release()
+	err = Migrate(conn.Conn(), pgmodel.VersionInfo{Version: version.Version, CommitHash: "azxtestcommit"})
 	if err != nil {
 		t.Fatal(err)
 	}

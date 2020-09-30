@@ -12,9 +12,8 @@ import (
 
 	"github.com/blang/semver/v4"
 	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
-	"github.com/timescale/timescale-prometheus/pkg/log"
-	"github.com/timescale/timescale-prometheus/pkg/version"
+	"github.com/timescale/promscale/pkg/log"
+	"github.com/timescale/promscale/pkg/version"
 )
 
 var (
@@ -23,17 +22,17 @@ var (
 
 // checkExtensionsVersion checks for the correct version and enables the extension if
 // it is at the right version
-func checkExtensionsVersion(conn *pgxpool.Pool) error {
+func checkExtensionsVersion(conn *pgx.Conn) error {
 	if err := checkTimescaleDBVersion(conn); err != nil {
 		return err
 	}
-	if err := checkTimescalePrometheusExtraVersion(conn); err != nil {
+	if err := checkPromscaleExtensionVersion(conn); err != nil {
 		return err
 	}
 	return nil
 }
 
-func checkTimescaleDBVersion(conn *pgxpool.Pool) error {
+func checkTimescaleDBVersion(conn *pgx.Conn) error {
 	timescaleVersion, isInstalled, err := fetchInstalledExtensionVersion(conn, "timescaledb")
 	if err != nil {
 		return fmt.Errorf("could not get the installed extension version: %w", err)
@@ -60,8 +59,8 @@ func checkTimescaleDBVersion(conn *pgxpool.Pool) error {
 	return nil
 }
 
-func checkTimescalePrometheusExtraVersion(conn *pgxpool.Pool) error {
-	currentVersion, isInstalled, err := fetchInstalledExtensionVersion(conn, "timescale_prometheus_extra")
+func checkPromscaleExtensionVersion(conn *pgx.Conn) error {
+	currentVersion, isInstalled, err := fetchInstalledExtensionVersion(conn, "promscale")
 	if err != nil {
 		return fmt.Errorf("could not get the installed extension version: %w", err)
 	}
@@ -77,31 +76,31 @@ func checkTimescalePrometheusExtraVersion(conn *pgxpool.Pool) error {
 	return nil
 }
 
-func migrateExtension(conn *pgxpool.Pool) error {
+func migrateExtension(conn *pgx.Conn) error {
 	availableVersions, err := fetchAvailableExtensionVersions(conn)
 	ExtensionIsInstalled = false
 	if err != nil {
 		return err
 	}
 	if len(availableVersions) == 0 {
-		log.Warn("msg", "timescale_prometheus_extra is not available, proceeding without extension")
+		log.Warn("msg", "the promscale extension is not available, proceeding without extension")
 		return nil
 	}
 
 	newVersion, ok := getNewExtensionVersion(availableVersions)
 	if !ok {
-		log.Warn("msg", "timescale_prometheus_extra is not available at the right version, need version: %v, proceeding without extension", version.ExtVersionRangeString)
+		log.Warn("msg", "the promscale extension is not available at the right version, need version: %v, proceeding without extension", version.ExtVersionRangeString)
 		return nil
 	}
 
-	currentVersion, isInstalled, err := fetchInstalledExtensionVersion(conn, "timescale_prometheus_extra")
+	currentVersion, isInstalled, err := fetchInstalledExtensionVersion(conn, "promscale")
 	if err != nil {
 		return fmt.Errorf("Could not get the installed extension version: %w", err)
 	}
 
 	if !isInstalled {
 		_, extErr := conn.Exec(context.Background(),
-			fmt.Sprintf("CREATE EXTENSION IF NOT EXISTS timescale_prometheus_extra WITH SCHEMA %s VERSION '%s'",
+			fmt.Sprintf("CREATE EXTENSION IF NOT EXISTS promscale WITH SCHEMA %s VERSION '%s'",
 				extSchema, getSqlVersion(newVersion)))
 		if extErr != nil {
 			return extErr
@@ -112,13 +111,13 @@ func migrateExtension(conn *pgxpool.Pool) error {
 	comparator := currentVersion.Compare(newVersion)
 	if comparator > 0 {
 		//currentVersion greater than what we can handle, don't use the extension
-		log.Warn("msg", "timescale_prometheus_extra at a greater version than supported by the connector: %v > %v, proceeding without extension", currentVersion, newVersion)
+		log.Warn("msg", "the promscale extension at a greater version than supported by the connector: %v > %v, proceeding without extension", currentVersion, newVersion)
 	} else if comparator == 0 {
 		//Nothing to do we are at the correct version
 	} else {
 		//Upgrade to the right version
 		_, err := conn.Exec(context.Background(),
-			fmt.Sprintf("ALTER EXTENSION timescale_prometheus_extra UPDATE TO '%s'",
+			fmt.Sprintf("ALTER EXTENSION promscale UPDATE TO '%s'",
 				getSqlVersion(newVersion)))
 		if err != nil {
 			return err
@@ -128,11 +127,11 @@ func migrateExtension(conn *pgxpool.Pool) error {
 	return checkExtensionsVersion(conn)
 }
 
-func fetchAvailableExtensionVersions(conn *pgxpool.Pool) (semver.Versions, error) {
+func fetchAvailableExtensionVersions(conn *pgx.Conn) (semver.Versions, error) {
 	var versionStrings []string
 	versions := make(semver.Versions, 0)
 	err := conn.QueryRow(context.Background(),
-		"SELECT array_agg(version) FROM pg_available_extension_versions WHERE name ='timescale_prometheus_extra'").Scan(&versionStrings)
+		"SELECT array_agg(version) FROM pg_available_extension_versions WHERE name ='promscale'").Scan(&versionStrings)
 
 	if err != nil {
 		return versions, err
@@ -153,7 +152,7 @@ func fetchAvailableExtensionVersions(conn *pgxpool.Pool) (semver.Versions, error
 	return versions, nil
 }
 
-func fetchInstalledExtensionVersion(conn *pgxpool.Pool, extensionName string) (semver.Version, bool, error) {
+func fetchInstalledExtensionVersion(conn *pgx.Conn, extensionName string) (semver.Version, bool, error) {
 	var versionString string
 	if err := conn.QueryRow(
 		context.Background(),
@@ -166,7 +165,7 @@ func fetchInstalledExtensionVersion(conn *pgxpool.Pool, extensionName string) (s
 		return semver.Version{}, true, err
 	}
 
-	if extensionName == "timescale_prometheus_extra" {
+	if extensionName == "promscale" {
 		versionString = correctVersionString(versionString)
 	}
 

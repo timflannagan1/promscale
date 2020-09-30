@@ -5,24 +5,27 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/prometheus/prometheus/pkg/labels"
 	"math"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/prometheus/prometheus/pkg/labels"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
-	"github.com/timescale/timescale-prometheus/pkg/log"
-	"github.com/timescale/timescale-prometheus/pkg/pgmodel"
-	"github.com/timescale/timescale-prometheus/pkg/prompb"
-	"github.com/timescale/timescale-prometheus/pkg/promql"
-	"github.com/timescale/timescale-prometheus/pkg/query"
+	"github.com/timescale/promscale/pkg/log"
+	"github.com/timescale/promscale/pkg/pgmodel"
+	"github.com/timescale/promscale/pkg/prompb"
+	"github.com/timescale/promscale/pkg/promql"
+	"github.com/timescale/promscale/pkg/query"
 )
 
-type mockSeriesSet struct{}
+type mockSeriesSet struct {
+	err error
+}
 
 func (m mockSeriesSet) Next() bool {
 	return false
@@ -33,6 +36,10 @@ func (m mockSeriesSet) At() storage.Series {
 }
 
 func (m mockSeriesSet) Err() error {
+	return m.err
+}
+
+func (m mockSeriesSet) Warnings() storage.Warnings {
 	return nil
 }
 
@@ -57,9 +64,9 @@ func (m mockQuerier) Query(*prompb.Query) ([]*prompb.TimeSeries, error) {
 	panic("implement me")
 }
 
-func (m mockQuerier) Select(int64, int64, bool, *storage.SelectHints, []parser.Node, ...*labels.Matcher) (storage.SeriesSet, parser.Node, storage.Warnings, error) {
+func (m mockQuerier) Select(int64, int64, bool, *storage.SelectHints, []parser.Node, ...*labels.Matcher) (storage.SeriesSet, parser.Node) {
 	time.Sleep(m.timeToSleepOnSelect)
-	return &mockSeriesSet{}, nil, nil, m.selectErr
+	return &mockSeriesSet{err: m.selectErr}, nil
 }
 
 func (m mockQuerier) NumCachedLabels() int {
@@ -114,7 +121,9 @@ func TestParseDuration(t *testing.T) {
 }
 
 func TestQuery(t *testing.T) {
-	_ = log.Init("debug")
+	_ = log.Init(log.Config{
+		Level: "debug",
+	})
 	testCases := []struct {
 		name        string
 		timeout     string
