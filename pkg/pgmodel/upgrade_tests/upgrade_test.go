@@ -23,20 +23,20 @@ import (
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/timescale/timescale-prometheus/pkg/internal/testhelpers"
-	"github.com/timescale/timescale-prometheus/pkg/log"
-	"github.com/timescale/timescale-prometheus/pkg/pgmodel"
-	"github.com/timescale/timescale-prometheus/pkg/prompb"
-	"github.com/timescale/timescale-prometheus/pkg/version"
+	"github.com/timescale/promscale/pkg/internal/testhelpers"
+	"github.com/timescale/promscale/pkg/log"
+	"github.com/timescale/promscale/pkg/pgmodel"
+	"github.com/timescale/promscale/pkg/prompb"
+	"github.com/timescale/promscale/pkg/version"
 
 	_ "github.com/jackc/pgx/v4/stdlib"
 
-	. "github.com/timescale/timescale-prometheus/pkg/pgmodel"
+	. "github.com/timescale/promscale/pkg/pgmodel"
 )
 
 var (
 	testDatabase = flag.String("database", "tmp_db_timescale_upgrade_test", "database to run integration tests on")
-	useExtension = flag.Bool("use-extension", true, "use the timescale_prometheus_extra extension")
+	useExtension = flag.Bool("use-extension", true, "use the promscale extension")
 	printLogs    = flag.Bool("print-logs", false, "print TimescaleDB logs")
 )
 
@@ -46,11 +46,14 @@ var prevDBImage = "timescale/timescaledb:latest-pg12"
 func TestMain(m *testing.M) {
 	var code int
 	if *useExtension {
-		cleanImage = "timescaledev/timescale_prometheus_extra:latest-pg12"
-		prevDBImage = "timescaledev/timescale_prometheus_extra:0.1-pg12"
+		cleanImage = "timescaledev/promscale-extension:latest-pg12"
+		//TODO: note this uses the old timescale_prometheus_extra docker images
+		prevDBImage = "timescaledev/timescale_prometheus_extra:0.1.1-pg12"
 	}
 	flag.Parse()
-	_ = log.Init("debug")
+	_ = log.Init(log.Config{
+		Level: "debug",
+	})
 	code = m.Run()
 	os.Exit(code)
 }
@@ -188,6 +191,9 @@ func printDbInfoDifferences(t *testing.T, pristineDbInfo dbInfo, upgradedDbInfo 
 	if !reflect.DeepEqual(upgradedDbInfo.schemaNames, pristineDbInfo.schemaNames) {
 		t.Logf("different schemas\nexpected:\n\t%v\ngot:\n\t%v", pristineDbInfo.schemaNames, upgradedDbInfo.schemaNames)
 	}
+	if !reflect.DeepEqual(upgradedDbInfo.extensions, pristineDbInfo.extensions) {
+		t.Logf("different extensions\nexpected:\n\t%v\ngot:\n\t%v", pristineDbInfo.extensions, upgradedDbInfo.extensions)
+	}
 	pristineSchemas := make(map[string]schemaInfo)
 	for _, schema := range pristineDbInfo.schemas {
 		pristineSchemas[schema.name] = schema
@@ -269,7 +275,7 @@ func withDBStartingAtOldVersionAndUpgrading(
 		}
 		db.Close()
 
-		connectorImage := "timescale/timescale-prometheus:" + prevVersion.String()
+		connectorImage := "timescale/promscale:" + prevVersion.String()
 		connector, err := testhelpers.StartConnectorWithImage(context.Background(), connectorImage, *printLogs, *testDatabase)
 		if err != nil {
 			log.Fatal(err.Error())
@@ -366,11 +372,11 @@ func withNewDBAtCurrentVersion(t testing.TB, DBName string,
 }
 
 func migrateToVersion(t testing.TB, connectURL string, version string, commitHash string) {
-	migratePool, err := pgxpool.Connect(context.Background(), connectURL)
+	migratePool, err := pgx.Connect(context.Background(), connectURL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer migratePool.Close()
+	defer func() { _ = migratePool.Close(context.Background()) }()
 	err = Migrate(migratePool, pgmodel.VersionInfo{Version: version, CommitHash: commitHash})
 	if err != nil {
 		t.Fatal(err)
@@ -430,7 +436,14 @@ func writeReqToHttp(r prompb.WriteRequest) *bytes.Reader {
 func doWrite(t *testing.T, client *http.Client, url string, data ...[]prompb.TimeSeries) {
 	for _, data := range data {
 		body := writeReqToHttp(tsWriteReq(copyMetrics(data)))
-		resp, err := client.Post(url, "application/x-www-form-urlencoded; param=value", body)
+		req, err := http.NewRequest("POST", url, body)
+		if err != nil {
+			t.Errorf("Error creating request: %v", err)
+		}
+		req.Header.Add("Content-Encoding", "snappy")
+		req.Header.Set("Content-Type", "application/x-protobuf")
+		req.Header.Set("X-Prometheus-Remote-Write-Version", "0.1.0")
+		resp, err := client.Do(req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -490,6 +503,7 @@ var ourSchemas []string = []string{
 type dbInfo struct {
 	schemaNames []string
 	schemas     []schemaInfo
+	extensions  string // \dx
 }
 
 type schemaInfo struct {
@@ -518,6 +532,7 @@ func getDbInfo(t *testing.T, container testcontainers.Container, outputDir strin
 		)
 	}
 
+	info.extensions = getPsqlInfo(t, container, outputDir, "\\dx")
 	info.schemas = make([]schemaInfo, len(ourSchemas))
 	for i, schema := range ourSchemas {
 		info := &info.schemas[i]

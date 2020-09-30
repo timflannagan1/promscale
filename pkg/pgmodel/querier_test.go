@@ -11,7 +11,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
-	"github.com/timescale/timescale-prometheus/pkg/prompb"
+	"github.com/timescale/promscale/pkg/prompb"
 )
 
 type mockQuerier struct {
@@ -24,8 +24,8 @@ type mockQuerier struct {
 
 var _ Querier = (*mockQuerier)(nil)
 
-func (q *mockQuerier) Select(mint int64, maxt int64, sortSeries bool, hints *storage.SelectHints, path []parser.Node, ms ...*labels.Matcher) (storage.SeriesSet, parser.Node, storage.Warnings, error) {
-	return nil, nil, nil, nil
+func (q *mockQuerier) Select(mint int64, maxt int64, sortSeries bool, hints *storage.SelectHints, path []parser.Node, ms ...*labels.Matcher) (storage.SeriesSet, parser.Node) {
+	return nil, nil
 }
 
 func (q *mockQuerier) Query(*prompb.Query) ([]*prompb.TimeSeries, error) {

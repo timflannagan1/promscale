@@ -8,7 +8,7 @@ import (
 
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql/parser"
-	"github.com/timescale/timescale-prometheus/pkg/promql"
+	"github.com/timescale/promscale/pkg/promql"
 )
 
 func marshalVectorResponse(writer io.Writer, data promql.Vector, warnings []string) error {
@@ -43,7 +43,7 @@ func marshalCommonFooter(out *errorWrapper, warnings []string) {
 }
 
 func marshalMatrixData(out *errorWrapper, data promql.Matrix) {
-	out.WriteStrings(`{"resultType":"`, parser.ValueTypeMatrix, `","result":[`)
+	out.WriteStrings(`{"resultType":"`, string(parser.ValueTypeMatrix), `","result":[`)
 	{
 		for i, data := range data {
 			open := `,{"metric":{`
@@ -71,7 +71,7 @@ func marshalMatrixData(out *errorWrapper, data promql.Matrix) {
 }
 
 func marshalVectorData(out *errorWrapper, data promql.Vector) {
-	out.WriteStrings(`{"resultType":"`, parser.ValueTypeVector, `","result":[`)
+	out.WriteStrings(`{"resultType":"`, string(parser.ValueTypeVector), `","result":[`)
 	{
 		floatLen := 0
 		for i, data := range data {

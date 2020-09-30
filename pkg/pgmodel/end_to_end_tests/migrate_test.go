@@ -6,15 +6,19 @@ package end_to_end_tests
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/blang/semver/v4"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
-	"github.com/timescale/timescale-prometheus/pkg/internal/testhelpers"
-	"github.com/timescale/timescale-prometheus/pkg/pgmodel"
-	"github.com/timescale/timescale-prometheus/pkg/pgmodel/test_migrations"
-	"github.com/timescale/timescale-prometheus/pkg/version"
+	"github.com/timescale/promscale/pkg/api"
+	"github.com/timescale/promscale/pkg/internal/testhelpers"
+	"github.com/timescale/promscale/pkg/pgclient"
+	"github.com/timescale/promscale/pkg/pgmodel"
+	"github.com/timescale/promscale/pkg/pgmodel/test_migrations"
+	"github.com/timescale/promscale/pkg/runner"
+	"github.com/timescale/promscale/pkg/version"
 )
 
 func TestMigrate(t *testing.T) {
@@ -33,15 +37,97 @@ func TestMigrate(t *testing.T) {
 
 		readOnly := testhelpers.GetReadOnlyConnection(t, *testDatabase)
 		defer readOnly.Close()
-		err = pgmodel.CheckDependencies(readOnly, pgmodel.VersionInfo{Version: version.Version})
+		conn, err := readOnly.Acquire(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Release()
+		err = pgmodel.CheckDependencies(conn.Conn(), pgmodel.VersionInfo{Version: version.Version})
 		if err != nil {
 			t.Error(err)
 		}
 
-		err = pgmodel.CheckDependencies(readOnly, pgmodel.VersionInfo{Version: "100.0.0"})
+		err = pgmodel.CheckDependencies(conn.Conn(), pgmodel.VersionInfo{Version: "100.0.0"})
 		if err == nil {
 			t.Errorf("Expected error in CheckDependencies")
 		}
+	})
+}
+
+func TestMigrateLock(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	withDB(t, *testDatabase, func(db *pgxpool.Pool, _ testing.TB) {
+		conn, err := db.Acquire(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		pgxcfg := conn.Conn().Config()
+		cfg := runner.Config{
+			Migrate:          false,
+			StopAfterMigrate: false,
+			UseVersionLease:  true,
+			PgmodelCfg: pgclient.Config{
+				Database:                *testDatabase,
+				Host:                    pgxcfg.Host,
+				Port:                    int(pgxcfg.Port),
+				User:                    pgxcfg.User,
+				Password:                pgxcfg.Password,
+				SslMode:                 "allow",
+				MaxConnections:          -1,
+				WriteConnectionsPerProc: 1,
+			},
+		}
+		conn.Release()
+		metrics := api.InitMetrics()
+		reader, err := runner.CreateClient(&cfg, metrics)
+		// reader on its own should start
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg2 := cfg
+		cfg2.Migrate = true
+		migrator, err := runner.CreateClient(&cfg2, metrics)
+		// a regular migrator will just become a reader
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		cfg3 := cfg2
+		cfg3.StopAfterMigrate = true
+		_, err = runner.CreateClient(&cfg3, metrics)
+		if err == nil {
+			t.Fatalf("migration should fail due to lock")
+		}
+		if !strings.Contains(err.Error(), "Could not acquire migration lock") {
+			t.Fatalf("Incorrect error, expected lock failure, foud: %v", err)
+		}
+
+		reader.Close()
+		migrator.Close()
+
+		only_migrator, err := runner.CreateClient(&cfg3, metrics)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if only_migrator != nil {
+			t.Fatal(only_migrator)
+		}
+
+		migrator, err = runner.CreateClient(&cfg2, metrics)
+		// a regular migrator should still start
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer migrator.Close()
+
+		reader, err = runner.CreateClient(&cfg, metrics)
+		// reader should still be able to start
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer reader.Close()
 	})
 }
 
@@ -64,7 +150,7 @@ func TestMigrateTwice(t *testing.T) {
 		}
 
 		var versionString string
-		err := db.QueryRow(context.Background(), "SELECT value FROM _timescaledb_catalog.metadata WHERE key='timescale_prometheus_version'").Scan(&versionString)
+		err := db.QueryRow(context.Background(), "SELECT value FROM _timescaledb_catalog.metadata WHERE key='promscale_version'").Scan(&versionString)
 		if err != nil {
 			if err == pgx.ErrNoRows && !*useExtension {
 				//Without an extension, metadata will not be written if running as non-superuser
@@ -116,20 +202,25 @@ func TestMigrationLib(t *testing.T) {
 			"idempotent 2",
 		}
 
-		mig := pgmodel.NewMigrator(db, test_migrations.MigrationFiles, testTOC)
+		migrate_to := func(version string) {
+			c, err := db.Acquire(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer c.Release()
+			mig := pgmodel.NewMigrator(c.Conn(), test_migrations.MigrationFiles, testTOC)
 
-		err := mig.Migrate(semver.MustParse("0.1.1"))
-		if err != nil {
-			t.Fatal(err)
+			err = mig.Migrate(semver.MustParse(version))
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 
+		migrate_to("0.1.1")
 		verifyLogs(t, db, expected)
 
 		//does nothing
-		err = mig.Migrate(semver.MustParse("0.1.1"))
-		if err != nil {
-			t.Fatal(err)
-		}
+		migrate_to("0.1.1")
 		verifyLogs(t, db, expected)
 
 		//migration + idempotent files on update
@@ -138,34 +229,22 @@ func TestMigrationLib(t *testing.T) {
 			"idempotent 1",
 			"idempotent 2")
 
-		err = mig.Migrate(semver.MustParse("0.2.0"))
-		if err != nil {
-			t.Fatal(err)
-		}
+		migrate_to("0.2.0")
 		verifyLogs(t, db, expected)
 
 		//does nothing, since non-dev and same version as before
-		err = mig.Migrate(semver.MustParse("0.2.0"))
-		if err != nil {
-			t.Fatal(err)
-		}
+		migrate_to("0.2.0")
 		verifyLogs(t, db, expected)
 
 		//even if no version upgrades, idempotent files apply
 		expected = append(expected,
 			"idempotent 1",
 			"idempotent 2")
-		err = mig.Migrate(semver.MustParse("0.8.0"))
-		if err != nil {
-			t.Fatal(err)
-		}
+		migrate_to("0.8.0")
 		verifyLogs(t, db, expected)
 
 		//staying on same version does nothing
-		err = mig.Migrate(semver.MustParse("0.8.0"))
-		if err != nil {
-			t.Fatal(err)
-		}
+		migrate_to("0.8.0")
 		verifyLogs(t, db, expected)
 
 		//migrate two version 0.9.0 and 0.10.0 at once to make sure ordered correctly
@@ -175,30 +254,21 @@ func TestMigrationLib(t *testing.T) {
 			"migration 0.10.0=2",
 			"idempotent 1",
 			"idempotent 2")
-		err = mig.Migrate(semver.MustParse("0.10.0"))
-		if err != nil {
-			t.Fatal(err)
-		}
+		migrate_to("0.10.0")
 		verifyLogs(t, db, expected[0:13])
 
 		//upgrading version, idempotent files apply
 		expected = append(expected,
 			"idempotent 1",
 			"idempotent 2")
-		err = mig.Migrate(semver.MustParse("0.10.1-dev"))
-		if err != nil {
-			t.Fatal(err)
-		}
+		migrate_to("0.10.1-dev")
 		verifyLogs(t, db, expected)
 
 		//even if no version upgrades, idempotent files apply if it's a dev version
 		expected = append(expected,
 			"idempotent 1",
 			"idempotent 2")
-		err = mig.Migrate(semver.MustParse("0.10.1-dev"))
-		if err != nil {
-			t.Fatal(err)
-		}
+		migrate_to("0.10.1-dev")
 		verifyLogs(t, db, expected)
 
 		//now test logic within a release:
@@ -206,19 +276,14 @@ func TestMigrationLib(t *testing.T) {
 			"migration 0.10.1=1",
 			"idempotent 1",
 			"idempotent 2")
-		err = mig.Migrate(semver.MustParse("0.10.1-dev.1"))
-		if err != nil {
-			t.Fatal(err)
-		}
+		migrate_to("0.10.1-dev.1")
 		verifyLogs(t, db, expected[0:20])
+
 		expected = append(expected,
 			"migration 0.10.1=2",
 			"idempotent 1",
 			"idempotent 2")
-		err = mig.Migrate(semver.MustParse("0.10.1-dev.2"))
-		if err != nil {
-			t.Fatal(err)
-		}
+		migrate_to("0.10.1-dev.2")
 		verifyLogs(t, db, expected)
 
 		//test beta tags
@@ -226,10 +291,7 @@ func TestMigrationLib(t *testing.T) {
 			"migration 0.10.2-beta=1",
 			"idempotent 1",
 			"idempotent 2")
-		err = mig.Migrate(semver.MustParse("0.10.2-beta.dev.1"))
-		if err != nil {
-			t.Fatal(err)
-		}
+		migrate_to("0.10.2-beta.dev.1")
 		verifyLogs(t, db, expected)
 	})
 }

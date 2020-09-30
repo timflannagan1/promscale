@@ -16,8 +16,8 @@ import (
 
 	"github.com/jackc/pgx/v4/pgxpool"
 	_ "github.com/jackc/pgx/v4/stdlib"
-	"github.com/timescale/timescale-prometheus/pkg/internal/testhelpers"
-	"github.com/timescale/timescale-prometheus/pkg/log"
+	"github.com/timescale/promscale/pkg/internal/testhelpers"
+	"github.com/timescale/promscale/pkg/log"
 )
 
 var (
@@ -89,9 +89,9 @@ func TestRESTApi(t *testing.T) {
 	}
 }
 
-func TestPgAdvisoryLock(t *testing.T) {
+func TestPgLeaderLock(t *testing.T) {
 	testhelpers.WithDB(t, *testDatabase, testhelpers.NoSuperuser, func(pool *pgxpool.Pool, t testing.TB, connectURL string) {
-		lock, err := NewPgAdvisoryLock(1, connectURL)
+		lock, err := NewPgLeaderLock(1, connectURL, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -100,7 +100,7 @@ func TestPgAdvisoryLock(t *testing.T) {
 			t.Error("Couldn't obtain the lock")
 		}
 
-		newLock, err := NewPgAdvisoryLock(1, connectURL)
+		newLock, err := NewPgLeaderLock(1, connectURL, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -130,7 +130,7 @@ func TestPgAdvisoryLock(t *testing.T) {
 
 func TestElector(t *testing.T) {
 	testhelpers.WithDB(t, *testDatabase, testhelpers.NoSuperuser, func(pool *pgxpool.Pool, t testing.TB, connectURL string) {
-		lock1, err := NewPgAdvisoryLock(2, connectURL)
+		lock1, err := NewPgLeaderLock(2, connectURL, nil)
 		if err != nil {
 			t.Error(err)
 		}
@@ -141,7 +141,7 @@ func TestElector(t *testing.T) {
 			t.Error("Failed to become a leader")
 		}
 
-		lock2, err := NewPgAdvisoryLock(2, connectURL)
+		lock2, err := NewPgLeaderLock(2, connectURL, nil)
 		if err != nil {
 			t.Error(err)
 		}
@@ -165,12 +165,12 @@ func TestElector(t *testing.T) {
 
 func TestPrometheusLivenessCheck(t *testing.T) {
 	testhelpers.WithDB(t, *testDatabase, testhelpers.NoSuperuser, func(pool *pgxpool.Pool, t testing.TB, connectURL string) {
-		lock1, err := NewPgAdvisoryLock(3, connectURL)
+		lock1, err := NewPgLeaderLock(3, connectURL, nil)
 		if err != nil {
 			t.Error(err)
 		}
 		defer lock1.Close()
-		lock2, err := NewPgAdvisoryLock(3, connectURL)
+		lock2, err := NewPgLeaderLock(3, connectURL, nil)
 		if err != nil {
 			t.Error(err)
 		}
@@ -205,7 +205,9 @@ func TestPrometheusLivenessCheck(t *testing.T) {
 }
 func TestMain(m *testing.M) {
 	flag.Parse()
-	err := log.Init("debug")
+	err := log.Init(log.Config{
+		Level: "debug",
+	})
 	if err != nil {
 		panic(err)
 	}
