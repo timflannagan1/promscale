@@ -15,8 +15,28 @@ if ! oc get ns ${NAMESPACE} >/dev/null 2>&1; then
     oc create ns ${NAMESPACE}
 fi
 
-echo "Adding the 'anyuid' SCC to the default ServiceAccount"
+echo "Adding the 'anyuid' SCC to the Postgres ServiceAccount"
 oc -n ${NAMESPACE} adm policy add-scc-to-user anyuid -z postgres
+
+
+#
+# General Connector Resources
+#
+if ! oc -n ${NAMESPACE} get sa postgres >/dev/null 2>&1; then
+    echo "Creating the exporter Service"
+    oc -n ${NAMESPACE} apply -f ${MANIFEST_DIR}/timescale/sa.yaml
+fi
+
+if ! oc -n ${NAMESPACE} get role ${NAMESPACE}-service-account >/dev/null 2>&1; then
+    echo "Creating the exporter Service"
+    oc -n ${NAMESPACE} apply -f ${MANIFEST_DIR}/timescale/role.yaml
+fi
+
+if ! oc -n ${NAMESPACE} get rolebinding ${NAMESPACE}-service-account >/dev/null 2>&1; then
+    echo "Creating the exporter Service"
+    oc -n ${NAMESPACE} apply -f ${MANIFEST_DIR}/timescale/role_binding.yaml
+fi
+
 
 #
 # Create the TimescaleDB resources
