@@ -37,7 +37,6 @@ if ! oc -n ${NAMESPACE} get rolebinding ${NAMESPACE}-service-account >/dev/null 
     oc -n ${NAMESPACE} apply -f ${MANIFEST_DIR}/timescale/role_binding.yaml
 fi
 
-
 #
 # Create the TimescaleDB resources
 #
