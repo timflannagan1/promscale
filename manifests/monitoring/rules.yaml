@@ -4,7 +4,7 @@ metadata:
   name: metering
 spec:
   groups:
-  - interval: 5s
+  - interval: 5m
     name: metering.rules
     rules:
     - expr: |
